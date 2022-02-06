@@ -143,7 +143,7 @@ static letter_state_t mark_letter(letter_state_t existing, letter_state_t guess)
         case GAME_LETTER_RIGHT: return GAME_LETTER_RIGHT;
     }
     return GAME_LETTER_NO;
-};
+}
 
 static bool check(guess_t *guess, const char *word, letter_state_t state[ALPHABET_SIZE]) {
     unsigned noice_count = 0;

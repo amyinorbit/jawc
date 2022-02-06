@@ -35,7 +35,7 @@ typedef struct {
 
 static void add_history_entry(history_t *stats, const history_entry_t *entry, bool safe) {
     if(safe) {
-        for(int i = 0; i < stats->count; ++i) {
+        for(unsigned i = 0; i < stats->count; ++i) {
             if(stats->entries[i].seq == entry->seq) {
                 stats->entries[i] = *entry;
                 return;
@@ -117,7 +117,7 @@ static void compute_stats(const history_t *history, stats_t *stats) {
         stats->freq[i] = 0;
     }
     
-    for(int i = 0; i < history->count; ++i) {
+    for(unsigned i = 0; i < history->count; ++i) {
         const history_entry_t *entry = &history->entries[i];
         
         if(entry->guess_count > MAX_GUESSES) continue;
@@ -138,7 +138,7 @@ static void compute_stats(const history_t *history, stats_t *stats) {
 
 void game_stats(const game_t *game) {
     const char *path = history_path();
-    history_t history = {};
+    history_t history = {.count = 0};
     load_history(&history, path);
     
     history_entry_t new_entry = {
@@ -148,7 +148,7 @@ void game_stats(const game_t *game) {
     };
     add_history_entry(&history, &new_entry, true);
     
-    stats_t stats = {};
+    stats_t stats = {.wins=0};
     compute_stats(&history, &stats);
     
     printf("------\n");

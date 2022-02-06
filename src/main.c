@@ -19,6 +19,9 @@
 #include "game.h"
 
 int main(int argc, const char **argv) {
+    (void)argc;
+    (void)argv;
+    
     game_t game;
     game_init(&game, "allowed-guesses.txt", "answers.txt");
 
