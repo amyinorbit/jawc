@@ -126,7 +126,7 @@ static void compute_stats(const history_t *history, stats_t *stats) {
             stats->streak += 1;
             
             if(stats->streak > stats->long_streak) {
-                stats->long_streak = stats->long_streak;
+                stats->long_streak = stats->streak;
             }
         } else {
             stats->streak = 0;

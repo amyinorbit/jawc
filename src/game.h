@@ -48,7 +48,7 @@ typedef struct {
     // result_t    last_result;
 } game_t;
 
-void game_init(game_t *game);
+void game_init(game_t *game, int wordle);
 void game_fini(game_t *game);
 
 result_t game_submit(game_t *game, const char *guess, const guess_t **out);
@@ -57,7 +57,5 @@ void print_board(const game_t *game, bool show_emoji, FILE *out);
 void print_share_sheet(const game_t *game, FILE *out);
 
 void game_stats(const game_t *game);
-// unsigned game_get_guess_count(const game_t *game);
-// const guess_t *game_get_guess(const game_t *game, unsigned idx);
 
 #endif /* end of include guard: JAWC_GAME_H */

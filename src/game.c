@@ -72,7 +72,7 @@ unsigned get_wordle_seq() {
 }
 
 
-void game_init(game_t *game) {
+void game_init(game_t *game, int wordle) {
     assert(game);
     
     (void)safe_strdup; // Because clang.
@@ -80,6 +80,10 @@ void game_init(game_t *game) {
     unsigned seq = get_wordle_seq();
     if(seq >= answers_size) {
         seq = answers_size - 1;
+    }
+    
+    if(wordle > 0 && (unsigned)wordle <= seq) {
+        seq = wordle;
     }
     
     memset(game, 0, sizeof(*game));
@@ -108,7 +112,7 @@ static letter_state_t mark_letter(letter_state_t existing, letter_state_t guess)
     switch(existing) {
         case GAME_LETTER_UNUSED: return guess;
         case GAME_LETTER_NO: return GAME_LETTER_NO;
-        case GAME_LETTER_MISPLACED: return guess;
+        case GAME_LETTER_MISPLACED: return GAME_LETTER_MISPLACED;
         case GAME_LETTER_RIGHT: return GAME_LETTER_RIGHT;
     }
     return GAME_LETTER_NO;
