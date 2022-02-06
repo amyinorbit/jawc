@@ -33,9 +33,11 @@ int main(int argc, const char **argv) {
     
     line_t *editor = line_new(&(line_functions_t){.print_prompt = print_prompt});
     line_set_prompt(editor, "wordle");
-    char *word = NULL;
     bool done = false;
-    while(!done && (word = line_get(editor)) != NULL) {
+    while(!done) {
+        
+        char *word = line_get(editor);
+        if(!word) return 1;
         
         const guess_t *guess = NULL;
         result_t result = game_submit(&game, word, &guess);

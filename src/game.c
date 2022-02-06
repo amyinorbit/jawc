@@ -77,10 +77,15 @@ void game_init(game_t *game) {
     
     (void)safe_strdup; // Because clang.
     
+    unsigned seq = get_wordle_seq();
+    if(seq >= answers_size) {
+        seq = answers_size - 1;
+    }
+    
     memset(game, 0, sizeof(*game));
     game->won = false;
     game->guess_count = 0;
-    game->seq = get_wordle_seq();
+    game->seq = seq;
     hset_init(&game->words);
     
     load_answer_list(&game->words);
