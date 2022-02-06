@@ -38,7 +38,6 @@ typedef struct {
 
 typedef struct {
     hset_t          words;
-    char            **answers;
     
     bool            won;
     unsigned        seq;
@@ -49,7 +48,7 @@ typedef struct {
     // result_t    last_result;
 } game_t;
 
-void game_init(game_t *game, const char *words, const char *answers);
+void game_init(game_t *game);
 void game_fini(game_t *game);
 
 result_t game_submit(game_t *game, const char *guess, const guess_t **out);

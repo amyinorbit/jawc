@@ -29,8 +29,7 @@ int main(int argc, const char **argv) {
     (void)argc;
     (void)argv;
     
-    game_init(&game, "allowed-guesses.txt", "answers.txt");
-
+    game_init(&game);
     
     line_t *editor = line_new(&(line_functions_t){.print_prompt = print_prompt});
     line_set_prompt(editor, "wordle");

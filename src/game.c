@@ -8,12 +8,12 @@
 //===--------------------------------------------------------------------------------------------===
 #include "game.h"
 #include "memory.h"
+#include "dict.h"
 #include <assert.h>
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
 #include <time.h>
 
 #define XOR_KEY     0x5a
@@ -26,68 +26,32 @@ static void xor_string(char *str, uint8_t key) {
     }
 }
 
-char **load_answer_list(const char *path, hset_t *set) {
-    assert(path);
+void load_answer_list(hset_t *set) {
     
-    FILE *in = fopen(path, "rb");
-    if(!in) return NULL;
-    
-    char **list = NULL;
-    size_t cap = 0;
-    size_t size = 0;
-    
-    char *word = NULL;
-    size_t word_cap = 0;
-    
-    while(getline(&word, &word_cap, in) != -1) {
+    for(unsigned i = 0; i < answers_size; ++i) {
+        const char *answer = answers[i];
+        char word[WORD_SIZE+1];
+        strncpy(word, answer, WORD_SIZE);
+        word[WORD_SIZE] = '\0';
+        xor_string(word, XOR_KEY);
+        
         size_t len = strlen(word);
         if(len && word[len-1] == '\n') {
             word[len-1] = '\0';
             len -= 1;
         }
         if(len != WORD_SIZE) continue;
-        
-        if(size + 2 > cap) {
-            cap = cap ? cap * 2 : 128;
-            list = safe_realloc(list, cap * sizeof(char *));
-        }
-        xor_string(word, XOR_KEY);
         hset_insert(set, word);
-        list[size] = safe_strdup(word);
-        size += 1;
     }
-    safe_free(word);
-    
-    fclose(in);
-    
-    if(list) {
-        list[size] = NULL;
-    }
-    return list;
 }
 
-bool load_word_list(const char *path, hset_t *set) {
-    assert(path);
+void load_word_list(hset_t *set) {
     assert(set);
     
-    FILE *in = fopen(path, "rb");
-    if(!in) return false;
-    
-    char *word = NULL;
-    size_t word_cap = 0;
-    
-    while(getline(&word, &word_cap, in) != -1) {
-        size_t len = strlen(word);
-        if(len && word[len-1] == '\n') {
-            word[len-1] = '\0';
-            len -= 1;
-        }
-        if(len != WORD_SIZE) continue;
+    for(unsigned i = 0; i < words_size; ++i) {
+        const char *word = words[i];
         hset_insert(set, word);
     }
-    safe_free(word);
-    
-    return true;
 }
 
 unsigned get_wordle_seq() {
@@ -108,16 +72,22 @@ unsigned get_wordle_seq() {
 }
 
 
-void game_init(game_t *game, const char *word_list, const char *answers_list) {
+void game_init(game_t *game) {
     assert(game);
+    
+    (void)safe_strdup; // Because clang.
+    
     memset(game, 0, sizeof(*game));
     game->won = false;
     game->guess_count = 0;
     game->seq = get_wordle_seq();
     hset_init(&game->words);
-    game->answers = load_answer_list(answers_list, &game->words);
-    load_word_list(word_list, &game->words);
-    strncpy(game->answer, game->answers[game->seq], WORD_SIZE);
+    
+    load_answer_list(&game->words);
+    load_word_list(&game->words);
+    
+    strncpy(game->answer, answers[game->seq], WORD_SIZE);
+    xor_string(game->answer, XOR_KEY);
     
     for(int i = 0; i < ALPHABET_SIZE; ++i) {
         game->alphabet[i] = GAME_LETTER_UNUSED;
@@ -127,12 +97,6 @@ void game_init(game_t *game, const char *word_list, const char *answers_list) {
 void game_fini(game_t *game) {
     assert(game);
     hset_fini(&game->words);
-    if(game->answers) {
-        for(size_t i = 0; game->answers[i]; ++i) {
-            free(game->answers[i]);
-        }
-        free(game->answers);
-    }
 }
 
 static letter_state_t mark_letter(letter_state_t existing, letter_state_t guess) {
