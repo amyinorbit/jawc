@@ -10,13 +10,18 @@
 #include <assert.h>
 #include <ctype.h>
 #include <math.h>
+#include <term/colors.h>
 
 static void print_green(char c, FILE *out) {
-    fprintf(out, "\033[32m%c\033[0m", c);
+    term_set_fg(out, TERM_GREEN);
+    fputc(c, out);
+    term_set_fg(out, TERM_DEFAULT);
 }
 
 static void print_yellow(char c, FILE *out) {
-    fprintf(out, "\033[33m%c\033[0m", c);
+    term_set_fg(out, TERM_YELLOW);
+    fputc(c, out);
+    term_set_fg(out, TERM_DEFAULT);
 }
 
 // static void print_magenta(char c, FILE *out) {
@@ -24,7 +29,8 @@ static void print_yellow(char c, FILE *out) {
 // }
 
 static void print_norm(char c, FILE *out) {
-    fprintf(out, "%c", c);
+    term_set_fg(out, TERM_DEFAULT);
+    fputc(c, out);
 }
 
 static void print_alphabet_line(const letter_state_t alphabet[ALPHABET_SIZE], unsigned line, FILE *out) {
@@ -33,7 +39,8 @@ static void print_alphabet_line(const letter_state_t alphabet[ALPHABET_SIZE], un
     unsigned start = letters_per_line * line;
     unsigned end = start + letters_per_line;
     if(end > ALPHABET_SIZE) end = ALPHABET_SIZE;
-    
+
+    term_set_bold(out, true);
     for(unsigned i = start; i < end; ++i) {
         char letter = i + 'A';
         switch(alphabet[i]) {
@@ -59,9 +66,12 @@ static void print_alphabet_line(const letter_state_t alphabet[ALPHABET_SIZE], un
             fprintf(out, " ");
         }
     }
+    term_style_reset(out);
 }
 
 static void print_guess(const guess_t *guess, FILE *out) {
+    term_set_bold(out, true);
+    term_reverse(out);
     for(unsigned i = 0; i < WORD_SIZE; ++i) {
         char c = toupper(guess->word[i]);
         switch(guess->check[i]) {
@@ -79,6 +89,7 @@ static void print_guess(const guess_t *guess, FILE *out) {
             break;
         }
     }
+    term_style_reset(out);
 }
 
 static void print_emoji_guess(const guess_t *guess, FILE *out) {

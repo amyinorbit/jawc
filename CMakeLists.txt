@@ -9,6 +9,7 @@ set(SRC src/game.c src/main.c src/printing.c src/set.c src/stats.c)
 set(HDR src/game.h src/memory.h src/set.h)
 set(ALL_SRC ${SRC} ${HDR})
 
+add_subdirectory(lib/termutils)
 add_executable(jawc ${ALL_SRC})
 target_compile_options(jawc PRIVATE -Wall -Wextra -Wpedantic -Werror)
-
+target_link_libraries(jawc PRIVATE termutils::termutils)

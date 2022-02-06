@@ -15,28 +15,33 @@
 */
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
+#include <term/line.h>
+#include <term/colors.h>
 #include "game.h"
+
+game_t game;
+
+void print_prompt(const char *name) {
+    printf("%s %u/%u> ", name, game.guess_count+1, MAX_GUESSES);
+}
 
 int main(int argc, const char **argv) {
     (void)argc;
     (void)argv;
     
-    game_t game;
     game_init(&game, "allowed-guesses.txt", "answers.txt");
 
+    
+    line_t *editor = line_new(&(line_functions_t){.print_prompt = print_prompt});
+    line_set_prompt(editor, "wordle");
     char *word = NULL;
-    size_t size = 0;
     bool done = false;
-
-    while(!done) {
-
-        printf("wordle:%u/%u> ", game.guess_count+1, MAX_GUESSES);
-        if(getline(&word, &size, stdin) == -1) break;
+    while(!done && (word = line_get(editor)) != NULL) {
         
         const guess_t *guess = NULL;
         result_t result = game_submit(&game, word, &guess);
         print_board(&game, false, stdout);
+        free(word);
         
         switch(result) {
         case GAME_RESULT_ALREADY_GUESSED:
@@ -58,12 +63,11 @@ int main(int argc, const char **argv) {
             break;
         }
     }
+    line_destroy(editor);
     
     game_stats(&game);
-    
     print_share_sheet(&game, stdout);
     
-    free(word);
     game_fini(&game);
     return 0;
 }
