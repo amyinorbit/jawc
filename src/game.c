@@ -108,14 +108,8 @@ void game_fini(game_t *game) {
     hset_fini(&game->words);
 }
 
-static letter_state_t mark_letter(letter_state_t existing, letter_state_t guess) {
-    switch(existing) {
-        case GAME_LETTER_UNUSED: return guess;
-        case GAME_LETTER_NO: return GAME_LETTER_NO;
-        case GAME_LETTER_MISPLACED: return GAME_LETTER_MISPLACED;
-        case GAME_LETTER_RIGHT: return GAME_LETTER_RIGHT;
-    }
-    return GAME_LETTER_NO;
+static inline letter_state_t mark_letter(letter_state_t existing, letter_state_t guess) {
+    return guess > existing ? guess : existing;
 }
 
 static bool check(guess_t *guess, const char *word, letter_state_t state[ALPHABET_SIZE]) {
