@@ -3,4 +3,5 @@ jawc
 build
 *.o
 answers_decrypt.txt
+target_list.txt
 Makefile

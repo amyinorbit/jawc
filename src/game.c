@@ -16,8 +16,10 @@
 #include <string.h>
 #include <time.h>
 
-#define XOR_KEY     0x5a
+extern const unsigned target_count;
+extern const unsigned targets[];
 
+#define XOR_KEY 0x5a
 
 static void xor_string(char *str, uint8_t key) {
     while(*str) {
@@ -86,6 +88,10 @@ void game_init(game_t *game, int wordle) {
         seq = wordle;
     }
     
+    if(seq < 0 || seq >= target_count) {
+        seq = 0;
+    }
+    
     memset(game, 0, sizeof(*game));
     game->won = false;
     game->guess_count = 0;
@@ -95,7 +101,9 @@ void game_init(game_t *game, int wordle) {
     load_answer_list(&game->words);
     load_word_list(&game->words);
     
-    strncpy(game->answer, answers[game->seq], WORD_SIZE);
+    int answer_idx = targets[seq];
+    
+    strncpy(game->answer, answers[answer_idx], WORD_SIZE);
     xor_string(game->answer, XOR_KEY);
     
     for(int i = 0; i < ALPHABET_SIZE; ++i) {
