@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+XOR_KEY = 0x5a
 
 def output_head(out):
     out.write('// jawc dictionary data\n')
@@ -18,13 +19,26 @@ def output_data_array(name, data, out):
     out.write('\n')
     out.write('const unsigned %s_size = %d;\n' % (name, len(data)))
 
-with open('answers.txt', 'r') as answers_txt, open('allowed-guesses.txt', 'r') as words_txt:
-    
-    answers = [word.rstrip() for word in answers_txt]
+def xor_word(word, key):
+    return "".join([chr(ord(l) ^ key) for l in word])
+
+with open('answers_decrypt.txt', 'r') as answers_txt, open('allowed-guesses.txt', 'r') as words_txt:
+    answers_ordered = [xor_word(word.rstrip(), XOR_KEY) for word in answers_txt]
+    answers = sorted(answers_ordered)
+    indices = [answers.index(word) for word in answers_ordered]
     words = [word.rstrip() for word in words_txt]
     
-with open('src/dict.c', 'w') as out_c, open('src/dict.h', 'w') as out_h:
+with open('src/dict.c', 'w') as out_c, open('src/dict.h', 'w') as out_h, open('src/target.c', 'w') as out_tgt:
     output_head(out_h)
+    
+    # const unsigned target_count = 2309;
+    # const unsigned targets[] = {
+    
+    out_tgt.write('const unsigned target_count = %d;\n' % len(indices))
+    out_tgt.write('const unsigned targets[] = {\n')
+    for idx in indices:
+        out_tgt.write('    %d,\n' % idx)
+    out_tgt.write('};\n')
     
     out_h.write('\n')
     out_h.write('#ifndef _JAWC_DICT_H_\n')
