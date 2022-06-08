@@ -22,6 +22,7 @@ typedef struct {
     unsigned max_streak;
     
     unsigned last_won;
+    unsigned last_played;
     
     unsigned guesses[MAX_GUESSES];
 } stats_t;
@@ -177,6 +178,7 @@ bool load_stats(stats_t *stats, const char *path) {
     if(!json_get_i(&dict, "cur_streak", (int *)&stats->cur_streak)) goto errout;
     if(!json_get_i(&dict, "max_streak", (int *)&stats->max_streak)) goto errout;
     if(!json_get_i(&dict, "last_won", (int *)&stats->last_won)) goto errout;
+    if(!json_get_i(&dict, "last_played", (int *)&stats->last_played)) goto errout;
     if(json_get_vi(&dict, "guesses", (int *)&stats->guesses, MAX_GUESSES) != MAX_GUESSES) goto errout;
     free(tok);
     free(json);
@@ -198,6 +200,7 @@ bool save_stats(const stats_t *stats, const char *path) {
     write_json_i(out, "cur_streak", stats->cur_streak);             write_json_next(out);
     write_json_i(out, "max_streak", stats->max_streak);             write_json_next(out);
     write_json_i(out, "last_won", stats->last_won);                 write_json_next(out);
+    write_json_i(out, "last_played", stats->last_played);           write_json_next(out);
     write_json_vi(out, "guesses", (const int *)stats->guesses, MAX_GUESSES);
     fprintf(out, "}\n");
     
@@ -246,6 +249,7 @@ static const char* history_path() {
 //     }
 // }
 static void add_game_stats(stats_t *stats, const game_t *game) {
+    if(game->seq == stats->last_played) return;
     stats->played += 1;
     if(game->won) {
         stats->won += 1;
@@ -262,6 +266,19 @@ static void add_game_stats(stats_t *stats, const game_t *game) {
     }
 }
 
+static unsigned most_guesses(const stats_t *stats) {
+    unsigned most = 0;
+    for(unsigned i = 0; i < MAX_GUESSES; ++i) {
+        if(stats->guesses[i] > most) most = stats->guesses[i];
+    }
+    return most;
+}
+
+static void print_bar(unsigned size) {
+    for(unsigned i = 0; i < size; ++i) {
+        printf("█");
+    }
+}
 
 void game_stats(const game_t *game) {
     (void)safe_strdup;
@@ -285,6 +302,21 @@ void game_stats(const game_t *game) {
     printf("won:     %.0f%%\n", 100 * (double)stats.won/(double)stats.played);
     printf("streak:  %u\n", stats.cur_streak);
     printf("longest: %u\n", stats.max_streak);
+    printf("guesses:\n");
+    
+#define BAR_CHART_W (20)
+    
+    double most = most_guesses(&stats);
+    if(stats.played && most > 0) {
+        for(unsigned i = 0; i < MAX_GUESSES; ++i) {
+            unsigned count = stats.guesses[i];
+            unsigned chars = 1 + BAR_CHART_W * ((double)count/(most));
+            printf(" %u ", i+1);
+            print_bar(chars);
+            printf(" (%u)\n", count);
+        }
+    }
+    
     printf("------\n");
     
     save_stats(&stats, path);
