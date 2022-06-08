@@ -11,87 +11,195 @@
 #include <stdio.h>
 #include <unistd.h>
 
-typedef struct {
-    unsigned        seq;
-    unsigned        guess_count;
-    bool            has_won;
-} history_entry_t;
+#define JSMN_STRICT
+#define JSMN_NEXT_SIBLING
+#include "jsmn.h"
 
 typedef struct {
-    unsigned        count;
-    unsigned        capacity;
-    history_entry_t *entries;
-} history_t;
-
-
-typedef struct {
-    unsigned wins;
-    unsigned total;
-    unsigned streak;
-    unsigned long_streak;
+    unsigned won;
+    unsigned played;
+    unsigned cur_streak;
+    unsigned max_streak;
     
-    unsigned freq[MAX_GUESSES];
+    unsigned last_won;
+    
+    unsigned guesses[MAX_GUESSES];
 } stats_t;
 
-static void add_history_entry(history_t *stats, const history_entry_t *entry, bool safe) {
-    if(safe) {
-        for(unsigned i = 0; i < stats->count; ++i) {
-            if(stats->entries[i].seq == entry->seq) {
-                stats->entries[i] = *entry;
-                return;
-            }
+static void write_json_i(FILE *out, const char *key, int num) {
+    fprintf(out, "\"%s\": %d", key, num);
+}
+
+static void write_json_next(FILE *out) {
+    fprintf(out, ",");
+}
+
+static void write_json_vi(FILE *out, const char *key, const int *num, unsigned count) {
+    fprintf(out, "\"%s\": [", key);
+    for(unsigned i = 0; i < count; ++i) {
+        fprintf(out, "%d", num[i]);
+        if(i != count-1) {
+            write_json_next(out);
         }
     }
-    
-    if(stats->count + 1 > stats->capacity) {
-        stats->capacity = stats->capacity ? stats->capacity * 2 : 32;
-    }
-    stats->entries = safe_realloc(stats->entries, stats->capacity * 2);
-    stats->entries[stats->count] = *entry;
-    stats->count += 1;
+    fprintf(out, "]");
 }
 
-int load_history(history_t *stats, const char *path) {
-    (void)safe_strdup;
-    stats->entries = NULL;
-    stats->count = 0;
-    stats->capacity = 0;
+typedef struct {
+    const char      *text;
+    const jsmntok_t   *tokens;
+    unsigned        count;
+} json_t;
+
+static bool jsoneq(const char *json, const jsmntok_t *tok, const char *s, unsigned len) {
+  if ((tok->type & JSMN_STRING) && len == tok->end - tok->start &&
+      strncmp(json + tok->start, s, tok->end - tok->start) == 0) {
+    return true;
+  }
+  return false;
+}
+
+static const jsmntok_t *json_get(const json_t *json, const char *path) {
+    const char *next_path = NULL;
+    size_t len = strlen(path);
+    const char *slash = strchr(path, '/');
+    if(slash) {
+        next_path = slash + 1;
+        len -= strlen(slash);
+    }
     
-    FILE *in = fopen(path, "rb");
-    if(!in) return 0;
-    
-    char *line = NULL;
-    size_t cap = 0;
-    
-    while(getline(&line, &cap, in) != -1) {
+    for(unsigned i = 0; i < json->count;) {
+        const jsmntok_t *key = &json->tokens[i];
+        const jsmntok_t *val = &json->tokens[i+1];
+        unsigned obj_start = i + 2;
+        if(val->type & JSMN_CONTAINER) {
+            i = val->next_sibling;
+        } else {
+            i += 2;
+        }
+        if(!jsoneq(json->text, key, path, (int)len)) continue;
         
-        unsigned seq = 0;
-        unsigned attempts = 0;
+        if(!next_path) return val;
+        if(!(val->type & JSMN_OBJECT)) return NULL;
         
-        if(sscanf(line, "%u: %u", &seq, &attempts) != 2) continue;
-        
-        bool has_won = attempts > 0 && attempts <= MAX_GUESSES;
-        history_entry_t entry = {
-            .seq = seq,
-            .guess_count = has_won ? attempts : 0,
-            .has_won = has_won
+        json_t nested = {
+            .text = json->text,
+            .tokens = json->tokens + obj_start,
+            .count = (val->next_sibling - obj_start)
         };
-        add_history_entry(stats, &entry, false);
+        return json_get(&nested, next_path);
     }
-    
-    safe_free(line);
-    fclose(in);
-    return stats->count;
+    return NULL;
 }
 
-bool save_history(const history_t *stats, const char *path) {
+static bool check_int(const char *text, const jsmntok_t *tok, int *out) {
+    if(!(tok->type & JSMN_PRIMITIVE)) return false;
+    const char *val = text + tok->start;
+    if(val[0] != '-' && (val[0] < '0' || val[0] > '9')) return false;
+    *out = atoi(val);
+    return true;
+}
+
+static bool json_get_i(const json_t *json, const char *path, int *out) {
+    const jsmntok_t *tok = json_get(json, path);
+    if(!tok) {
+        fprintf(stderr, "missing value at json path '%s'\n", path);
+        return false;
+    }
+    if(check_int(json->text, tok, out)) return true;
+    fprintf(stderr, "invalid value at json path '%s'\n", path);
+    return false;
+}
+
+static int json_get_vi(const json_t *json, const char *path, int *out, unsigned cap) {
+    const jsmntok_t *tok = json_get(json, path);
+    if(!tok) {
+        fprintf(stderr, "missing array at json path '%s'\n", path);
+        return -1;
+    }
+    if(!(tok->type & JSMN_ARRAY)) {
+        fprintf(stderr, "invalid array at json path '%s'\n", path);
+        return -1;
+    }
+        
+    unsigned written = 0;
+    for(unsigned i = 0; i < tok->size && written < cap; ++i) {
+        const jsmntok_t *val = tok + (1 + i);
+        if(!check_int(json->text, val, out + written)) {
+            fprintf(stderr, "invalid interger array value at json path '%s'\n", path);
+            return -1;
+        }
+        written += 1;
+    }
+    return written;
+}
+
+bool load_stats(stats_t *stats, const char *path) {
+    FILE *in = fopen(path, "rb");
+    if(!in) return false;
+    fseek(in, 0, SEEK_END);
+    size_t json_len = ftell(in);
+    fseek(in, 0, SEEK_SET);
+    
+    char *json = safe_calloc(json_len+1, 1);
+    fread(json, json_len, 1, in);
+    json[json_len] = '\0';
+    fclose(in);
+    
+    int count = 0;
+    int cap = 0;
+    jsmntok_t *tok = NULL;
+    jsmn_parser parser;
+    jsmn_init(&parser);
+    
+    do {
+        cap = cap ? cap * 2 : 50;
+        tok = safe_calloc(cap, sizeof(*tok));
+        count = jsmn_parse(&parser, json, json_len, tok, cap);
+    } while(count == JSMN_ERROR_NOMEM);
+    
+    if(count <= 0) {
+        if(tok) free(tok);
+        if(json) free(json);
+        return false;
+    }
+    
+    if(!(tok[0].type & JSMN_OBJECT)) goto errout;
+    
+    json_t dict = {
+        .text = json,
+        .tokens = tok + 1,
+        .count = count - 1,
+    };
+    
+    if(!json_get_i(&dict, "won", (int *)&stats->won)) goto errout;
+    if(!json_get_i(&dict, "played",(int *) &stats->played)) goto errout;
+    if(!json_get_i(&dict, "cur_streak", (int *)&stats->cur_streak)) goto errout;
+    if(!json_get_i(&dict, "max_streak", (int *)&stats->max_streak)) goto errout;
+    if(!json_get_i(&dict, "last_won", (int *)&stats->last_won)) goto errout;
+    if(json_get_vi(&dict, "guesses", (int *)&stats->guesses, MAX_GUESSES) != MAX_GUESSES) goto errout;
+    free(tok);
+    free(json);
+    return true;
+    
+errout:
+    free(tok);
+    free(json);
+    return false;
+}
+
+bool save_stats(const stats_t *stats, const char *path) {
     FILE *out = fopen(path, "wb");
     if(!out) return false;
     
-    for(unsigned i = 0; i < stats->count; ++i) {
-        const history_entry_t *entry = &stats->entries[i];
-        fprintf(out, "%u: %u\n", entry->seq, entry->has_won ? entry->guess_count : 0);
-    }
+    fprintf(out, "{");
+    write_json_i(out, "won", stats->won);                           write_json_next(out);
+    write_json_i(out, "played", stats->played);                     write_json_next(out);
+    write_json_i(out, "cur_streak", stats->cur_streak);             write_json_next(out);
+    write_json_i(out, "max_streak", stats->max_streak);             write_json_next(out);
+    write_json_i(out, "last_won", stats->last_won);                 write_json_next(out);
+    write_json_vi(out, "guesses", (const int *)stats->guesses, MAX_GUESSES);
+    fprintf(out, "}\n");
     
     fclose(out);
     return true;
@@ -107,56 +215,77 @@ static const char* history_path() {
 }
 
 
-static void compute_stats(const history_t *history, stats_t *stats) {
-    stats->wins = 0;
-    stats->total = history->count;
-    stats->streak = 0;
-    stats->long_streak = 0;
-    
-    for(int i = 0; i < MAX_GUESSES; ++i) {
-        stats->freq[i] = 0;
-    }
-    
-    for(unsigned i = 0; i < history->count; ++i) {
-        const history_entry_t *entry = &history->entries[i];
+
+
+
+// static void compute_stats(const history_t *history, stats_t *stats) {
+//     stats->wins = 0;
+//     stats->total = history->count;
+//     stats->streak = 0;
+//     stats->long_streak = 0;
+//
+//     for(int i = 0; i < MAX_GUESSES; ++i) {
+//         stats->freq[i] = 0;
+//     }
+//
+//     for(unsigned i = 0; i < history->count; ++i) {
+//         const history_entry_t *entry = &history->entries[i];
+//
+//         if(entry->guess_count > MAX_GUESSES) continue;
+//         if(entry->has_won) {
+//             stats->wins += 1;
+//             stats->streak += 1;
+//
+//             if(stats->streak > stats->long_streak) {
+//                 stats->long_streak = stats->streak;
+//             }
+//         } else {
+//             stats->streak = 0;
+//         }
+//         stats->freq[entry->guess_count - 1] += 1;
+//     }
+// }
+static void add_game_stats(stats_t *stats, const game_t *game) {
+    stats->played += 1;
+    if(game->won) {
+        stats->won += 1;
+        stats->guesses[game->guess_count-1] += 1;
         
-        if(entry->guess_count > MAX_GUESSES) continue;
-        if(entry->has_won) {
-            stats->wins += 1;
-            stats->streak += 1;
-            
-            if(stats->streak > stats->long_streak) {
-                stats->long_streak = stats->streak;
-            }
-        } else {
-            stats->streak = 0;
+        stats->cur_streak = game->seq == stats->last_won + 1 ? stats->cur_streak + 1 : 1;
+        stats->last_won = game->seq;
+        
+        if(stats->cur_streak > stats->max_streak) {
+            stats->max_streak = stats->cur_streak;
         }
-        stats->freq[entry->guess_count - 1] += 1;
+    } else {
+        stats->cur_streak = 0;
     }
 }
 
 
 void game_stats(const game_t *game) {
+    (void)safe_strdup;
     const char *path = history_path();
-    history_t history = {.count = 0};
-    load_history(&history, path);
+    stats_t stats = {.won=0};
+    load_stats(&stats, path);
     
-    history_entry_t new_entry = {
-        .seq = game->seq,
-        .has_won = game->won,
-        .guess_count = game->guess_count
-    };
-    add_history_entry(&history, &new_entry, true);
+    add_game_stats(&stats, game);
+    // history_entry_t new_entry = {
+    //     .seq = game->seq,
+    //     .has_won = game->won,
+    //     .guess_count = game->guess_count
+    // };
+    // add_history_entry(&history, &new_entry, true);
     
-    stats_t stats = {.wins=0};
-    compute_stats(&history, &stats);
+    // stats_t stats = {.wins=0};
+    // compute_stats(&history, &stats);
     
     printf("------\n");
-    printf("played:  %u\n", stats.total);
-    printf("won:     %.0f%%\n", 100 * (double)stats.wins/(double)stats.total);
-    printf("streak:  %u\n", stats.streak);
-    printf("longest: %u\n", stats.long_streak);
+    printf("played:  %u\n", stats.played);
+    printf("won:     %.0f%%\n", 100 * (double)stats.won/(double)stats.played);
+    printf("streak:  %u\n", stats.cur_streak);
+    printf("longest: %u\n", stats.max_streak);
     printf("------\n");
     
-    save_history(&history, path);
+    save_stats(&stats, path);
 }
