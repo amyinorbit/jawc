@@ -105,7 +105,7 @@ static void print_emoji_guess(const guess_t *guess, FILE *out) {
             
         case GAME_LETTER_UNUSED:
         case GAME_LETTER_NO:
-            fprintf(out, "⬜️");
+            fprintf(out, "⬛");
             break;
         }
     }
